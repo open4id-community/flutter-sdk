@@ -52,18 +52,25 @@ flutter install             # installs the debug APK
 
 Google/GitHub/Apple bridges need their own registration (provider consoles plus
 the per-app Portal bridge URLs) — email and guest work with the dev
-registration above. The Flutter plugin's `SocialAuthClient`
-(`sdks/flutter/open4id_sdk/android/.../SocialAuthClient.java`) overrides the
-SDK's social seams:
-- **Google** — interactive account picker (fixes the silent empty-code issue
-  from the SDK default `AuthorizationClient` flow)
-- **GitHub / Apple** — Custom Tab + deep-link callback
-  (`/github-callback` / `/apple-callback`)
+registration above.
+
+- **GitHub / Apple** — implemented by the base SDK
+  (`Open4IDAuthClient.openGitHubCustomTab` / `openAppleCustomTab`, plus
+  `Open4IDAuthClient.completeDeepLink`). Pass the host `Activity` to the
+  client (`new Open4IDAuthClient(activity)` or `setHostActivity(activity)`)
+  and forward the deep-link intent URL to
+  `auth.handleNewIntent(...)` so the SDK completes the callback.
+- **Google** — the Flutter plugin's `SocialAuthClient`
+  (`sdks/flutter/open4id_sdk/android/.../SocialAuthClient.java`) overrides
+  the SDK's `getGoogleAuthorizationCode` seam with the interactive
+  `GoogleSignInIntent` account picker (fixes the silent empty-code issue from
+  the SDK default `AuthorizationClient` flow). Requires
+  `play-services-auth` as a runtime dependency in the host app.
 
 The host app's `AndroidManifest.xml` registers the deep-link intent filter for
 `com.open4id.example.android://open4id/callback`, and
-`MainActivity.kt` forwards `onActivityResult` and `onNewIntent` to
-`SocialAuthClient`.
+`MainActivity.kt` forwards `onActivityResult` (Google picker result) and
+`onNewIntent` (GitHub/Apple deep links) to the SDK.
 
 ## Auth state events
 
@@ -165,8 +172,8 @@ sdks/flutter/open4id_sdk/
 │   ├── open4id_login_dialog.dart    # Open4IDLoginDialog modal widget
 │   └── open4id_auth_view.dart       # Open4IDAuthView full-page login view
 └── android/
-    ├── build.gradle                 # com.open4id:open4id-sdk:0.3.2 from Maven Central
+    ├── build.gradle                 # com.open4id:open4id-sdk:0.3.3 from Maven Central
     └── src/main/java/com/open4id/sdk/flutter/
         ├── Open4idSdkPlugin.java    # delegates to native Open4IDAuthClient
-        └── SocialAuthClient.java    # interactive Google + Custom Tab social seams
+        └── SocialAuthClient.java    # interactive Google sign-in seam only
 ```

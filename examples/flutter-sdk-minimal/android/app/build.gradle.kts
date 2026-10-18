@@ -45,7 +45,7 @@ repositories {
 
 dependencies {
     // Android SDK comes transitively via the open4id_sdk Flutter plugin
-    // (com.open4id:open4id-sdk:0.3.2 from Maven Central).
+    // (com.open4id:open4id-sdk:0.3.3 from Maven Central).
     // Play Services Auth for Google sign-in (server auth code flow).
     implementation("com.google.android.gms:play-services-auth:21.2.0")
 }
