@@ -1,94 +1,84 @@
-# flutter_sdk_minimal_ui
+# open4id_sdk
 
-Minimal Flutter example with a game-built UI on top of the `open4id_sdk` headless API.
-Ports all features from the native `android-sdk-minimal-ui` example: editable config,
-bootstrap, login UI with email/password, sign-up, guest, Google/GitHub/Apple social
-sign-in, session management, `onAuthStateChanged` events, and the SDK's
-`Open4IDLoginDialog` modal.
+Open4ID client sdk for Flutter. Android delegates to the native Java SDK
+(`com.open4id:open4id-sdk`); iOS delegates to the native Swift SDK
+(`Open4IDSDK`), resolved through the plugin's Swift Package Manager
+manifest. One Dart API for both platforms.
 
-Uses `sdks/flutter/open4id_sdk` (Flutter plugin, Android v1) which delegates
-to `sdks/android/open4id-sdk/` (Java, version 0.3.2) via platform channels.
+## Status
 
-## Prerequisites
+**Approved 2026-10-16.** v1 shipped Android-only (iOS was a
+`platform_unavailable` stub). **iOS support is now implemented** on top of
+the `ios-v0.3.3` native tag: same method surface, same wire maps. Provides
+`signInWithPassword`, `continueAsGuest`, `signInWithGitHub`, `signInWithApple`,
+and `signInWithGoogle` (interactive GoogleSignIn-iOS picker, supplied by the
+plugin's `Open4IDSocialClient` — enable it per app with
+`configure(googleIosClientId: ...)`). `ensureSession` maps to
+`ensureSession(minValidityMs)`.
 
-1. An Open4ID application with a development environment, a public SDK
-   key (`sdk_pk_...`), and email/password + guest login enabled
-   (Publisher Portal → Applications → Authentication). The form comes
-   prefilled with the dev `Login Show Case` values.
-2. No dashboard changes needed: this example shares the package
-   (`com.open4id.example.android`) and redirect URI
-   (`com.open4id.example.android://open4id/callback`) already
-   registered for the SDK sample app.
-3. An Android device/emulator with Play Services and a signed-in Google
-   account for the Google flow.
+## Installation
 
-## Run
-
-```sh
-cd examples/flutter-sdk-minimal-ui
-flutter pub get
-flutter build apk --debug   # or flutter run
-flutter install             # installs the debug APK
+```yaml
+dependencies:
+  open4id_sdk: ^0.3.4
 ```
 
-## Features
+### iOS host requirements
 
-| Feature | Description |
-|---------|-------------|
-| **Config** | Editable app ID, environment, public key, endpoint, redirect URI, package name, portal origin |
-| **Bootstrap** | Loads OAuth discovery + provider readiness from the dev Core API |
-| **Auto-bootstrap** | "Open login UI" / "Open login dialog" auto-load bootstrap if not yet loaded |
-| **Login UI** | Flutter-built full-page screen with email/password, sign-up, forgot-password, guest |
-| **Login dialog** | SDK-provided `Open4IDLoginDialog` modal — same flows as the UI page |
-| **Login view** | SDK-provided `Open4IDAuthView` full-page view with session-aware account view |
-| **Google sign-in** | Interactive `GoogleSignInIntent` account picker (always returns a fresh server auth code) |
-| **GitHub sign-in** | Custom Tab + deep-link callback via Portal bridge |
-| **Apple sign-in** | Custom Tab with `form_post` + deep-link callback via Portal bridge |
-| **Session** | Refresh, sign out, delete account, user info |
-| **Auth state events** | `onAuthStateChanged` listener reacts to any sign-in/sign-out/refresh/deletion |
-| **Locale** | English / Vietnamese switching |
+- iOS 16.0+ deployment target.
+- Build with **Swift Package Manager** for iOS: enable
+  `flutter config --enable-swift-package-manager` and migrate the host
+  project (see flutter SPM doc: `flutter run` after `flutter pub get`; the
+  plugin resolves `Open4IDSDK` from
+  `https://github.com/open4id-community/ios-sdk`, tag `v0.3.x`, via
+  `ios/open4id_sdk/Package.swift`). CocoaPods is not supported for the iOS
+  side — the podspec intentionally fails fast with the reason.
+- Google sign-in works out of the box once you configure it:
+  - Pass the GCP **iOS-type** OAuth client id to `configure(googleIosClientId:)`
+    (ignored on Android, which binds via package name + SHA-1). Empty/omitted
+    keeps the typed `provider_unavailable` behavior on the Google button.
+  - Add the reversed client id (`com.googleusercontent.apps.<client-id>`) as
+    a URL scheme in the host `Info.plist` (plus your `redirectUri` scheme).
+  - The GoogleSignIn-iOS SDK itself is resolved automatically by the plugin's
+    Swift Package manifest — no host dependency needed.
 
-## Social sign-in registration
+Or depend on the local plugin:
 
-Google/GitHub/Apple bridges need their own registration (provider consoles plus
-the per-app Portal bridge URLs) — email and guest work with the dev
-registration above.
+```yaml
+dependencies:
+  open4id_sdk:
+    path: ../sdks/flutter/open4id_sdk
+```
 
-- **GitHub / Apple** — implemented by the base SDK
-  (`Open4IDAuthClient.openGitHubCustomTab` / `openAppleCustomTab`, plus
-  `Open4IDAuthClient.completeDeepLink`). Pass the host `Activity` to the
-  client (`new Open4IDAuthClient(activity)` or `setHostActivity(activity)`)
-  and forward the deep-link intent URL to
-  `auth.handleNewIntent(...)` so the SDK completes the callback.
-- **Google** — the Flutter plugin's `SocialAuthClient`
-  (`sdks/flutter/open4id_sdk/android/.../SocialAuthClient.java`) overrides
-  the SDK's `getGoogleAuthorizationCode` seam with the interactive
-  `GoogleSignInIntent` account picker (fixes the silent empty-code issue from
-  the SDK default `AuthorizationClient` flow). Requires
-  `play-services-auth` as a runtime dependency in the host app.
+## API
 
-The host app's `AndroidManifest.xml` registers the deep-link intent filter for
-`com.open4id.example.android://open4id/callback`, and
-`MainActivity.kt` forwards `onActivityResult` (Google picker result) and
-`onNewIntent` (GitHub/Apple deep links) to the SDK.
+See `lib/open4id_sdk.dart` and `lib/src/open4id_auth_client.dart`. The Dart
+API mirrors `@open4id/sdk` and the Android native SDK:
 
-## Auth state events
+```dart
+import 'package:open4id_sdk/open4id_sdk.dart';
 
-The activity registers `client.onAuthStateChanged(...)` so the main app can
-react to any auth state change (sign-in, sign-out, refresh, deletion) from any
-source — headless calls, the login UI, or the login dialog.
+final auth = Open4IDAuthClient();
 
-## Runtime dependency note
+await auth.configure(
+  appId: 'app_...',
+  environment: 'development',
+  publicSdkKey: 'sdk_pk_...',
+  redirectUri: 'com.example.game://open4id/callback',
+  packageName: 'com.example.game',
+);
 
-The Flutter SDK declares `play-services-auth` as `compileOnly` (so it never
-forces the dependency on host apps). Both example apps add it as
-`implementation 'com.google.android.gms:play-services-auth:21.2.0'` in their
-`android/app/build.gradle.kts` — required for Google sign-in to work.
+final boot = await auth.bootstrap();
+final session = await auth.signInWithPassword('player@example.com', 'password');
+final user = await auth.getUser();
+await auth.refresh();
+await auth.signOut();
+```
 
-## Using the SDK login dialog
+## Login dialog (UI widget)
 
-The Flutter SDK now ships `Open4IDLoginDialog` (`showOpen4IDLoginDialog()`),
-mirroring the native Android `Open4IDLoginDialog`:
+The SDK ships `Open4IDLoginDialog` — a modal dialog that mirrors the native
+Android `Open4IDLoginDialog`:
 
 ```dart
 import 'package:open4id_sdk/open4id_sdk.dart';
@@ -96,23 +86,28 @@ import 'package:open4id_sdk/open4id_sdk.dart';
 // After configure + bootstrap:
 showOpen4IDLoginDialog(
   context,
-  authClient,
+  auth,
   bootstrap,
   locale: 'en',
+  appName: 'My Game',          // optional; falls back to bootstrap.displayName
   listener: (provider) {
     print('signed in via $provider');
   },
 );
 ```
 
-The dialog renders email/password, sign-up, forgot-password, guest, and social
-buttons per bootstrap readiness. It listens to `onAuthStateChanged` so it
-reflects sign-in/sign-out/deletion from any source.
+The dialog renders email/password, sign-up ("Create account"), forgot-password,
+guest, and social buttons (Google, GitHub, Apple) per bootstrap readiness, in
+the same order as the Android SDK (social first, then email/password). The
+dialog auto-dismisses on successful sign-in/sign-up/guest. It listens to
+`onAuthStateChanged` so it reflects sign-in/sign-out/deletion from any source —
+the host app reacts via the `listener` callback rather than in-dialog status
+toasts.
 
-## Using the SDK login view
+## Login view (UI widget)
 
-The Flutter SDK also ships `Open4IDAuthView` — a full-page login view that
-mirrors the native Android `Open4IDAuthView`:
+The SDK ships `Open4IDAuthView` — a full-screen login view that mirrors the
+native Android `Open4IDAuthView`:
 
 ```dart
 import 'package:open4id_sdk/open4id_sdk.dart';
@@ -120,7 +115,7 @@ import 'package:open4id_sdk/open4id_sdk.dart';
 // After configure + bootstrap:
 showOpen4IDAuthView(
   context,
-  authClient,
+  auth,
   bootstrap,
   locale: 'en',
   appName: 'My Game',
@@ -130,50 +125,124 @@ showOpen4IDAuthView(
 );
 ```
 
-The view renders email/password, sign-up, forgot-password, guest, link-email,
-delete-account, and social buttons per bootstrap readiness. While the bound
-client holds a session, it renders the signed-in account view (refresh, sign
-out, delete account) instead of the login form.
+The view renders email/password, sign-up ("Create account"), forgot-password
+("Send reset link"), guest, link-email ("Link email"), delete-account
+("Delete my account"), and social buttons (Google, GitHub, Apple) per bootstrap
+readiness. While the bound client holds a session, it renders the signed-in
+account view (refresh, sign out, delete account) instead of the login form.
+Action buttons (Sign in, Continue as guest, Sign up, Send reset link, Link
+email, Delete my account, Refresh, Sign out, Delete account, BACK) render
+without icons; only social provider buttons carry brand SVG icons (Google,
+GitHub, Apple). It listens to `onAuthStateChanged` so it reflects state
+changes from any source.
 
-## Notes
+## Deep-link callback forwarding
 
-- All Android examples use different package IDs so they can coexist on the
-  device:
-  - `sdks/android/sample/` → `com.open4id.example.android`
-  - `examples/android-sdk-minimal/` → `com.open4id.example.android`
-  - `examples/android-sdk-minimal-ui/` → `com.open4id.example.android`
-  - `examples/flutter-sdk-minimal-ui/` → `com.open4id.example.android`
-- The native `android-sdk-minimal/` and `android-sdk-minimal-ui/` share the
-  same package ID (`com.open4id.example.android`) — install and test one at a
-  time.
-- Sessions live in SDK instance memory only and vanish on process death; pass
-  a `SessionStore` to `Open4IDAuthClient(storage)` to persist.
-- iOS is a `platform_unavailable` stub in v1 of the Flutter plugin.
+### Android
 
-## Project structure
+GitHub/Apple Custom Tab callbacks return via a deep-link intent
+(`?code&state`) on `onNewIntent`. The host app's `MainActivity` should forward
+the intent URL to the SDK:
 
+```dart
+// In your MainActivity or equivalent:
+import 'package:open4id_sdk/open4id_sdk.dart';
+
+final auth = Open4IDAuthClient();
+
+// Forward onNewIntent URL:
+await auth.handleNewIntent(intentDataString);
 ```
-examples/flutter-sdk-minimal-ui/
-├── lib/main.dart                    # Flutter UI + headless SDK integration
-├── android/
-│   ├── app/src/main/AndroidManifest.xml   # deep-link intent filter
-│   └── app/src/main/kotlin/.../MainActivity.kt  # forwards activity results/deep links
-└── pubspec.yaml                     # depends on open4id_sdk (path: ../../sdks/flutter/open4id_sdk)
 
-sdks/flutter/open4id_sdk/
-├── lib/open4id_sdk.dart             # public Dart API
-├── lib/src/open4id_auth_client.dart # Open4IDAuthClient (headless client)
-├── lib/src/auth_types.dart          # AuthSession, UserInfo, Bootstrap, etc.
-├── lib/src/auth_errors.dart         # typed SDK errors
-├── lib/src/attestation.dart         # Play Integrity / App Attest verdict
-├── lib/src/platform_channel.dart    # method/event channels to native
-├── lib/src/storage.dart             # SessionStore abstraction
-└── lib/src/ui/
-│   ├── open4id_login_dialog.dart    # Open4IDLoginDialog modal widget
-│   └── open4id_auth_view.dart       # Open4IDAuthView full-page login view
-└── android/
-    ├── build.gradle                 # com.open4id:open4id-sdk:0.3.3 from Maven Central
-    └── src/main/java/com/open4id/sdk/flutter/
-        ├── Open4idSdkPlugin.java    # delegates to native Open4IDAuthClient
-        └── SocialAuthClient.java    # interactive Google sign-in seam only
+### iOS
+
+GitHub/Apple callbacks complete inside the SDK's `ASWebAuthenticationSession`
+(the plugin attaches the foreground key window as the presentation anchor).
+Deep-link forwarding is not required for the standard flows; when a callback
+URL is forwarded to your app anyway (e.g. an interrupted flow that kept the
+system browser alive), pass it to `auth.handleNewIntent(...)` and the same
+completion is attempted — the method returns whether a pending transaction
+was consumable.
+
+The Flutter plugin (`Open4idSdkPlugin`) implements `ActivityAware` on Android
+and forwards `onActivityResult` to `SocialAuthClient.completeGoogleSignIn()`
+for the Google account picker result. GitHub/Apple callbacks are handled by
+the base SDK on both platforms; `handleNewIntent` completes the parked code
+slot when a deep link actually reaches the app.
+
+## Platform strategy
+
+- Dart owns the public API and error mapping (`client.auth.*` / `system.*`).
+- Android platform side delegates to `sdks/android/open4id-sdk/` (Java,
+  version `0.3.3`) via platform channels. GitHub/Apple Custom Tabs are
+  implemented by the base SDK (`Open4IDAuthClient.openGitHubCustomTab` /
+  `openAppleCustomTab`); pass the host `Activity` via
+  `new Open4IDAuthClient(activity)` or `setHostActivity(activity)`.
+- The Flutter plugin (`Open4idSdkPlugin`) implements `ActivityAware` on
+  Android and forwards Google sign-in `onActivityResult` results to
+  `SocialAuthClient.completeGoogleSignIn()`; host `MainActivity` should also
+  forward `onNewIntent` URLs to `auth.handleNewIntent()` for GitHub/Apple
+  callbacks.
+- iOS platform side delegates to the native Swift SDK (`Open4IDSDK`
+  v0.3.3) via platform channels — the same
+  `Open4IDAuthClient` headless surface as Swift apps:
+  `bootstrap()` (`platform: "ios"` binding), `handleCallback`/PKCE,
+  single-flight refresh, server-callback receipt, `signOut` with best-effort
+  revocation. Social providers:
+  - Apple/GitHub: SDK-owned `ASWebAuthenticationSession` (plugin supplies
+    the foreground key window as the presentation anchor).
+  - Google: interactive GoogleSignIn-iOS picker implemented by the plugin's
+    `Open4IDSocialClient` (subclass of the native client overriding
+    `getGoogleAuthorizationCode`) — the iOS analogue of the Android
+    `SocialAuthClient`. Client id arrives through
+    `configure(googleIosClientId:)`; empty keeps the typed
+    `provider_unavailable` behavior. Cancel maps to `popup_closed`,
+    the interaction budget (120 s) to `popup_timeout`, other GID failures
+    to `access_denied` with the `gid_*` diagnostics in `field_errors`.
+    Note: simulators cannot complete the Google keychain handshake
+    (`gid_code=-2` keychain error); verify on a physical device.
+- Attestation stays audit-only on both platforms (Play Integrity stub on
+  Android, `unavailable` verdict on iOS until the attestKey handshake is
+  contracted).
+
+## Security boundary
+
+- Never stores `sdk_sk_...`, OAuth secrets, Apple private keys, Vault refs,
+  or raw tokens in Dart. Tokens at rest use platform encrypted storage
+  (opt-in); memory-only default.
+- All errors branch on stable keys, never localized text.
+- `play-services-auth` is `compileOnly` in the SDK AAR — the host app must
+  add `implementation 'com.google.android.gms:play-services-auth:21.2.0'`
+  as a runtime dependency for Google sign-in to work (see both example
+  apps' `build.gradle.kts`).
+
+## Verification
+
+```sh
+cd sdks/flutter/open4id_sdk
+flutter pub get
+flutter analyze
+flutter test
 ```
+
+iOS plugin verifier (scratch host app, matches the pass run for v0.3.3 +
+iOS support):
+
+```sh
+cd /tmp && flutter create --platforms=ios --org com.open4id \
+    --project-name open4id_scratch open4id_scratch && cd open4id_scratch
+# - add `open4id_sdk: { path: /path/to/sdks/flutter/open4id_sdk }` to pubspec.yaml
+# - bump IPHONEOS_DEPLOYMENT_TARGET to 16.0 in ios/Runner.xcodeproj
+#   (FlutterGeneratedPluginSwiftPackage raises its SupportedPlatform to the
+#    host project's deployment target; 16.0 matches the plugin + native SDK)
+flutter pub get
+flutter build ios --simulator --no-codesign   # resolves Open4IDSDK via SPM
+```
+
+Live smoke on Android emulator + real device: bootstrap, redirect sign-in,
+password/guest/social, refresh rotation, revoke, delete. On iOS: password +
+guest round-trips and the GitHub/Apple web sessions on a real device
+(simulator web sheets can be flaky on iOS 27.1 per the native SDK task
+records).
+
+All Markdown in English.

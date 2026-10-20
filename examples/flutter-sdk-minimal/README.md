@@ -5,7 +5,8 @@ Mirrors the native `sdks/android/sample/` (`android-sdk-minimal`) example: edita
 bootstrap, Google/GitHub/Apple social sign-in, email/password sign-in, guest, session management
 (refresh, get user, sign out, delete account), locale switching, and `onAuthStateChanged` events.
 
-Uses `sdks/flutter/open4id_sdk` (Flutter plugin, Android v1) which delegates
+Uses the `open4id_sdk` Flutter plugin (0.3.4 from pub.dev; Android + iOS)
+which delegates
 to `sdks/android/open4id-sdk/` (Java, version 0.3.2) via platform channels.
 
 ## Prerequisites
@@ -105,7 +106,7 @@ examples/flutter-sdk-minimal/
 ├── android/
 │   ├── app/src/main/AndroidManifest.xml   # deep-link intent filter
 │   └── app/src/main/kotlin/.../MainActivity.kt  # forwards activity results/deep links
-└── pubspec.yaml                     # depends on open4id_sdk (path: ../../sdks/flutter/open4id_sdk)
+└── pubspec.yaml                     # depends on open4id_sdk ^0.3.4 (from pub.dev)
 
 sdks/flutter/open4id_sdk/
 ├── lib/open4id_sdk.dart             # public Dart API

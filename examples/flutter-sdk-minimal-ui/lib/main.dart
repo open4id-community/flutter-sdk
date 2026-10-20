@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open4id_sdk/open4id_sdk.dart';
@@ -36,6 +38,10 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
   Bootstrap? _bootstrapResult;
   Locale _locale = const Locale('en');
 
+  /// The dev application registers one native binding per platform
+  /// (Android package / iOS bundle id); forward to the right one.
+  static final bool _isIOS = Platform.isIOS;
+
   // Config fields
   final TextEditingController _appIdCtrl =
       TextEditingController(text: 'app_4a17c6406abaefdf0d9a705e7175b37c');
@@ -45,17 +51,34 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
   final TextEditingController _endpointCtrl =
       TextEditingController(text: 'https://id.open4id.com/api');
   final TextEditingController _redirectUriCtrl =
-      TextEditingController(text: 'com.open4id.example.android://open4id/callback');
+      TextEditingController(
+          text: _isIOS
+              ? 'com.open4id.example.ios://open4id/callback'
+              : 'com.open4id.example.android://open4id/callback');
   final TextEditingController _packageNameCtrl =
-      TextEditingController(text: 'com.open4id.example.android');
+      TextEditingController(
+          text: _isIOS
+              ? 'com.open4id.example.ios'
+              : 'com.open4id.example.android');
   final TextEditingController _portalOriginCtrl =
       TextEditingController(text: 'https://app.open4id.com');
+
+  /// The GCP **iOS-type** OAuth client bound to `com.open4id.example.ios`
+  /// (dev fixture, registered on the development application). GoogleSignIn
+  /// requires it on iOS; the server-auth-code audience comes from
+  /// `bootstrap().login.google.clientId` (the Web client). Ignored on
+  /// Android, which binds via package name + SHA-1. Mirrors the native iOS
+  /// sample's `googleIosClientId` config field.
+  final TextEditingController _googleIosClientIdCtrl =
+      TextEditingController(
+          text: '240704269959-fgo38gpqj16f9ompn9kb1mcej1e4fo84'
+              '.apps.googleusercontent.com');
 
   // Login form fields
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _passwordCtrl = TextEditingController();
 
-  bool _configExpanded = true;
+  final bool _configExpanded = true;
   bool _showingLogin = false;
 
   @override
@@ -94,6 +117,7 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
     _redirectUriCtrl.dispose();
     _packageNameCtrl.dispose();
     _portalOriginCtrl.dispose();
+    if (_isIOS) _googleIosClientIdCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -112,6 +136,8 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
         portalOrigin: _portalOriginCtrl.text.trim().isEmpty
             ? null
             : _portalOriginCtrl.text.trim(),
+        googleIosClientId:
+            _isIOS ? _googleIosClientIdCtrl.text.trim() : null,
       );
       if (mounted) setState(() => _status = 'configured');
       debugPrint('Open4ID: configure ok');
@@ -154,7 +180,8 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
     if (_bootstrapResult == null) {
       debugPrint('Open4ID: bootstrap not loaded, auto-loading…');
       _bootstrap().then((_) {
-        if (mounted && _bootstrapResult != null) {
+        if (!mounted) return;
+        if (_bootstrapResult != null) {
           debugPrint('Open4ID: auto-bootstrap done, showing SDK login view');
           showOpen4IDAuthView(
             context,
@@ -192,7 +219,8 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
     if (_bootstrapResult == null) {
       debugPrint('Open4ID: bootstrap not loaded, auto-loading…');
       _bootstrap().then((_) {
-        if (mounted && _bootstrapResult != null) {
+        if (!mounted) return;
+        if (_bootstrapResult != null) {
           debugPrint('Open4ID: auto-bootstrap done, showing SDK login dialog');
           showOpen4IDLoginDialog(
             context,
@@ -453,10 +481,10 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Configuration',
+                Text('Configuration',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               ],
             ),
@@ -475,6 +503,10 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
               _configField('Package Name', _packageNameCtrl),
               const SizedBox(height: 8),
               _configField('Portal Origin', _portalOriginCtrl),
+              if (_isIOS) ...[
+                const SizedBox(height: 8),
+                _configField('Google iOS client ID', _googleIosClientIdCtrl),
+              ],
               const SizedBox(height: 16),
               Row(
                 children: [

@@ -158,10 +158,11 @@ packages:
   open4id_sdk:
     dependency: "direct main"
     description:
-      path: "../../sdks/flutter/open4id_sdk"
-      relative: true
-    source: path
-    version: "0.3.2"
+      name: open4id_sdk
+      sha256: "4933252d5cf4073f3861744dc51b2a23fff997ec2ec182a12b092af6528c62fa"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.4"
   path:
     dependency: transitive
     description:
@@ -251,10 +252,10 @@ packages:
     dependency: transitive
     description:
       name: vector_graphics
-      sha256: "9d0e3b9cb16542ad660daee871e726a10d13a93b7b5391677c3160e8f5e83935"
+      sha256: "0964703d02677ac8636b4aef95de0b7e816224ff0082908c2c950529cb9a2f5e"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.3"
+    version: "1.2.4"
   vector_graphics_codec:
     dependency: transitive
     description:
@@ -305,4 +306,4 @@ packages:
     version: "7.0.1"
 sdks:
   dart: ">=3.11.0 <4.0.0"
-  flutter: ">=3.38.0"
+  flutter: ">=3.41.0"

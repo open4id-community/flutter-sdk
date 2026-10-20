@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:open4id_sdk/open4id_sdk.dart';
 
@@ -47,11 +49,26 @@ class _MinimalHomeState extends State<MinimalHome> {
       text: 'sdk_pk_24cf6cc954d16591812fd1b9953ef053f5133b13f7cec9ae');
   final _endpoint = TextEditingController(text: 'https://id.open4id.com/api');
   final _redirectUri = TextEditingController(
-      text: 'com.open4id.example.android://open4id/callback');
+      text: _isIOS
+          ? 'com.open4id.example.ios://open4id/callback'
+          : 'com.open4id.example.android://open4id/callback');
   final _portalOrigin =
       TextEditingController(text: 'https://app.open4id.com');
   final _email = TextEditingController();
   final _password = TextEditingController();
+
+  /// The dev application registers one native binding per platform
+  /// (Android package / iOS bundle id); forward to the right one.
+  static final bool _isIOS = Platform.isIOS;
+
+  /// The GCP **iOS-type** OAuth client bound to `com.open4id.example.ios`
+  /// (dev fixture, registered on the development application). GoogleSignIn
+  /// requires it on iOS; the server-auth-code audience comes from
+  /// `bootstrap().login.google.clientId` (the Web client). Mirrors the
+  /// native iOS sample's `googleIosClientId` config field.
+  final _googleIosClientId = TextEditingController(
+      text: '240704269959-fgo38gpqj16f9ompn9kb1mcej1e4fo84'
+          '.apps.googleusercontent.com');
 
   final _log = StringBuffer();
   final _logScroll = ScrollController();
@@ -82,6 +99,7 @@ class _MinimalHomeState extends State<MinimalHome> {
     _portalOrigin.dispose();
     _email.dispose();
     _password.dispose();
+    if (_isIOS) _googleIosClientId.dispose();
     _logScroll.dispose();
     super.dispose();
   }
@@ -104,8 +122,11 @@ class _MinimalHomeState extends State<MinimalHome> {
       publicSdkKey: _publicKey.text.trim(),
       endpoint: _endpoint.text.trim(),
       redirectUri: _redirectUri.text.trim(),
-      packageName: 'com.open4id.example.android',
+      packageName: _isIOS
+          ? 'com.open4id.example.ios'
+          : 'com.open4id.example.android',
       portalOrigin: _portalOrigin.text.trim(),
+      googleIosClientId: _isIOS ? _googleIosClientId.text.trim() : null,
     );
   }
 
@@ -113,6 +134,17 @@ class _MinimalHomeState extends State<MinimalHome> {
     final text = error.toString();
     final idx = text.indexOf(': ');
     return idx >= 0 ? text.substring(idx + 2) : text;
+  }
+
+  /// Root message plus `field_errors` diagnostics (provider seams like
+  /// Google put the underlying error there, e.g. `gid_code`).
+  String _errorDetail(Object error) {
+    final fields = error is SdkValidationError ? error.fieldErrors : null;
+    if (fields == null || fields.isEmpty) return _rootMessage(error);
+    final detail = fields.entries
+        .map((e) => '${e.key}=${e.value}')
+        .join(', ');
+    return '${_rootMessage(error)} [$detail]';
   }
 
   Future<void> _onBootstrap() async {
@@ -147,7 +179,7 @@ class _MinimalHomeState extends State<MinimalHome> {
       _appendLog(
           'signed in: sub=${session.userId} email=${user?.email ?? '?'}');
     } catch (e) {
-      _appendLog('google failed: ${_rootMessage(e)}');
+      _appendLog('google failed: ${_errorDetail(e)}');
     }
   }
 
