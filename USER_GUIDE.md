@@ -58,7 +58,7 @@ Add the package from [pub.dev](https://pub.dev/packages/open4id_sdk):
 
 ```yaml
 dependencies:
-  open4id_sdk: ^0.3.4
+  open4id_sdk: ^0.4.0
 ```
 
 ```sh
@@ -68,10 +68,10 @@ flutter pub get
 The package delegates each platform to its native SDK, resolved automatically
 at build time:
 
-- **Android** — `com.open4id:open4id-sdk:0.3.3` from Maven Central (the plugin
+- **Android** — `com.open4id:open4id-sdk:0.4.0` from Maven Central (the plugin
   declares it; no host action needed) plus the platform channel plugin
   `com.open4id.sdk.flutter.Open4idSdkPlugin`.
-- **iOS** — the native Swift SDK (`Open4IDSDK`, tag `v0.3.x`) resolved through
+- **iOS** — the native Swift SDK (`Open4IDSDK`, tag `v0.4.x`) resolved through
   the plugin's Swift Package manifest, plus the `GoogleSignIn-iOS` dependency
   used by the Google seam.
 
@@ -80,7 +80,7 @@ at build time:
 Before configuring the client, your Android host needs three pieces of wiring:
 
 1. **Deep-link intent filter.** Your `MainActivity` receives the redirect for
-   GitHub/Apple social flows as a `VIEW` intent. Register the redirect URI's
+   GitHub/Facebook/Apple social flows as a `VIEW` intent. Register the redirect URI's
    scheme in `AndroidManifest.xml`, exactly matching the redirect URI
    registered in the Open4ID console:
 
@@ -121,7 +121,7 @@ Before configuring the client, your Android host needs three pieces of wiring:
    class MainActivity : FlutterActivity() {
        override fun onNewIntent(intent: Intent) {
            super.onNewIntent(intent)
-           // GitHub/Apple Custom Tab deep links (?code&state).
+           // GitHub/Facebook/Apple Custom Tab deep links (?code&state).
            if (intent.data != null) {
                com.open4id.sdk.flutter.SocialAuthClient.completeDeepLink(intent.data)
            }
@@ -181,7 +181,7 @@ Before configuring the client, your Android host needs three pieces of wiring:
    </array>
    ```
 
-   No `Info.plist` keys are needed for GitHub/Apple — they use
+   No `Info.plist` keys are needed for GitHub/Facebook/Apple — they use
    `ASWebAuthenticationSession`, which the SDK drives in-app.
 
 ## Configure the client
@@ -309,7 +309,8 @@ await showOpen4IDLoginDialog(
   bootstrap,       // last snapshot from auth.bootstrap()
   locale: 'en',    // 'en' or 'vi'
   listener: (event) {
-    // event: 'email_password' | 'guest' | 'google' | 'github' | 'apple'
+    // event: 'email_password' | 'guest' | 'google' | 'github' | 'facebook'
+    //        | 'apple'
     //        'signed_out' | 'account_deleted' | 'session' (re-rendered
     //        an already-signed-in state)
     print('login happened: $event');
@@ -374,10 +375,10 @@ try {
 **Simulator note (iOS):** GoogleSignIn's keychain handshake cannot complete on
 iOS simulators; the Google button surfaces a typed
 `client.auth.access_denied` with `gid_*` diagnostics there. Verify the full
-Google round-trip on a physical device (GitHub/Apple and all other flows are
-unaffected on the simulator).
+Google round-trip on a physical device (GitHub/Facebook/Apple and all other
+flows are unaffected on the simulator).
 
-### GitHub and Apple
+### GitHub, Facebook, and Apple
 
 `signInWithGitHub()` (scopes `read:user user:email`) and `signInWithApple()`
 (`scope=email`, `response_mode=form_post`, `nonce` doubling as state) open the
@@ -385,12 +386,28 @@ Open4ID Portal bridges — Custom Tabs on Android, `ASWebAuthenticationSession`
 on iOS — and return control to your app through the redirect scheme; the SDK
 exchanges the return code automatically.
 
+`signInWithFacebook()` opens the Facebook OAuth dialog (`v26.0`,
+`scope=email`) the same way and posts `facebook_code` +
+`facebook_redirect_uri` to `POST /client/player_facebook_authorize`, which
+exchanges the code server-side with the Vault-backed App Secret. Its default
+callback is the per-app Portal bridge
+`<portalOrigin>/facebook-callback/<package>` for custom-scheme redirects (or
+the origin-derived `facebook-callback` page for web redirects); the resolved
+URI must be registered in the Facebook app's Valid OAuth Redirect URIs.
+
 ```dart
 await auth.signInWithGitHub();                    // default game callback URI
 await auth.signInWithGitHub(
     callbackUri: 'com.example.game://open4id/callback'); // optional override
+await auth.signInWithFacebook();                  // default Facebook callback URI
+await auth.signInWithFacebook(
+    callbackUri: 'com.example.game://open4id/facebook-callback'); // override
 await auth.signInWithApple();                     // default Return URL
 ```
+
+Facebook requires the provider enabled in bootstrap
+(`bootstrap().login.facebook.enabled`); otherwise the call throws
+`client.auth.provider_unavailable` with `provider=facebook`.
 
 Timeout (120 s) maps to `client.auth.popup_timeout`; user cancellation to
 `popup_closed`.
@@ -490,6 +507,70 @@ final verdict = await Attestation.collect();
 print(verdict.platform, verdict.status, verdict.error ?? '(no error)');
 ```
 
+## Payments
+
+The plugin bridges each platform's native built-in store — Play Billing
+(Android SDK 0.6.0+) and StoreKit (iOS SDK 0.6.0+) — behind one Dart
+surface. Core API re-verifies every purchase with the store before granting
+anything; the client claim is only a hint.
+
+- **Shop**: `store().loadShop()` resolves the platform's catalog rows with
+  store prices. Rows the store cannot resolve arrive with
+  `resolvable: false` (disable the Buy button); a store error (network,
+  store unreachable) throws `SdkStoreUnavailableError` (160003, retryable).
+- **Buy**: `store().buy(productId)` opens the real store sheet, verifies
+  the purchase through Core API, and acknowledges (one-time/subscription)
+  or consumes (consumable) only after the server accepted the proof — an
+  unverified purchase can still be auto-refunded. Branch on
+  `PurchaseOutcome`: grant from `entitlements` or `receipt` only when
+  `isVerified`; `pending` means ask-to-buy (a later restore picks it up);
+  `cancelled` is not an error.
+- **Consumables**: a verified consumable carries a `ConsumableReceipt`
+  with a stable `transactionRef` (`ptx_...`, never the store token). Grant
+  items keyed by that reference on `delivered`/`already_delivered`, and
+  reverse `refundedQuantity` when a later ledger read reports a refund.
+  Open4ID never owns item balances.
+- **Restore**: `payments().restore()` is self-sufficient — the native
+  stores register themselves as the proof source. A stored session
+  re-submits its purchases (idempotent); a reinstall starts as a fresh
+  guest and the store proof moves the anonymous binding, which is how what
+  the player paid for follows the store account. A valid proof owned by
+  another **credentialed** account is never taken: `restore` reports a
+  `conflict` count (the player must sign in as the owner) and `verify`
+  throws `SdkConflictError` (140006).
+- **Entitlements**: `entitlements().refresh()` re-reads the server-derived
+  rows; `has(key)` is true only for `active`/`grace`; `list()` keeps
+  expired/revoked history. The snapshot is cleared when the signed-in
+  player changes or signs out. `onChanged` fires on verify, restore,
+  refresh, sign-in, and sign-out.
+- **Ledger receipts**: `payments().purchases()` is the reconciliation read
+  (webhook delivery is not implemented): grant from `quantity` and reverse
+  `refundedQuantity`, both idempotent per `transactionRef`. Android only in
+  0.5.0 — the iOS SDK has no ledger read yet and answers
+  `sdk.not_implemented`.
+- **Headless proofs**: hosts that buy through Unity IAP or their own
+  billing client skip `store()` entirely and forward the proof:
+  `payments().verifyTransaction(productId, purchaseToken)` (Play purchase
+  token on Android) or the StoreKit 2 JWS representation (iOS),
+  `payments().verifyConsumable(...)` for consumables.
+- **Android manifest**: hosts must declare
+  `com.android.vending.BILLING` (Play refuses in-app products without it).
+  The store is inert without Play services.
+
+```dart
+// A minimal shop screen.
+final shop = await auth.store().loadShop();
+for (final row in shop) {
+  // render row.product.productId with row.formattedPrice; disable the
+  // button when !row.isResolvable
+}
+
+final outcome = await auth.store().buy('sku_premium');
+if (outcome.isVerified) {
+  await auth.entitlements().refresh();
+}
+```
+
 ## Error handling
 
 The SDK exposes a typed error hierarchy with **stable keys and integer
@@ -502,6 +583,8 @@ change between minor versions:
 | `SdkAuthError` | `110003` | Invalid credentials (`110005`), email verification required (`120001`), token failures. |
 | `SdkRateLimitedError` | `150001` | Rate limit; carries `retryAfterSec` (`-1` when the server did not specify). |
 | `SdkUnavailableError` | `160001` | Core API or transport unavailable (timeout, HTTP 5xx, connectivity). |
+| `SdkStoreUnavailableError` | `160003` | Store-side failure (Play Billing / StoreKit unreachable, product unavailable). Retryable. |
+| `SdkConflictError` | `140006` | The purchase is bound to another credentialed account (`client.payment.owned_by_another_account`); restore reports it as a `conflict` count instead. |
 | `SdkInternalError` | `170001` | Unexpected internal failure. |
 | `SdkNotImplementedError` | `-1` | Method not supported on the current platform or not yet shipped. |
 
@@ -533,9 +616,9 @@ the SDK key is always truncated to its last four characters.
 
 ## Security model
 
-- **No secrets in the SDK.** `sdk_sk_...`, OAuth client secrets, Apple private
-  keys, and Vault references never enter the client. The `sdk_pk_...` key is
-  public by design.
+- **No secrets in the SDK.** `sdk_sk_...`, OAuth client secrets, the Facebook
+  App Secret, Apple private keys, and Vault references never enter the client.
+  The `sdk_pk_...` key is public by design.
 - **No local JWT validation.** Player tokens are opaque and validated
   server-side. The SDK never parses a JWT nor exchanges JWKS material.
 - **Exact-match redirect URIs.** Native redirect URIs are custom schemes
@@ -556,7 +639,8 @@ the SDK key is always truncated to its last four characters.
 | `client.auth.provider_unavailable` from `signInWithGoogle` on Android | Play Services unavailable on the device/emulator, or the SHA-1/package binding of the debug/release build is not registered in the Google console for this app. |
 | `client.auth.provider_unavailable` from `signInWithGoogle` on iOS | `googleIosClientId` was not supplied (or is empty) at `configure`; supply the GCP iOS-type client id and the reversed scheme in `Info.plist`. |
 | Google fails on the iOS simulator with `access_denied` and `gid_*` diagnostics | Expected — GoogleSignIn's keychain handshake cannot complete on iOS simulators; verify on a physical device. |
-| `client.auth.popup_timeout` from GitHub/Apple | The redirect scheme is not registered (Android manifest / iOS URL Types), or the sign-in browser was dismissed/blocked; re-register and call again. |
-| GitHub/Apple callback arrives but the flow does not complete on Android | The host `MainActivity` does not forward `onNewIntent` to `SocialAuthClient.completeDeepLink(...)` (see [Android project setup](#android-project-setup)). |
+| `client.auth.popup_timeout` from GitHub/Facebook/Apple | The redirect scheme is not registered (Android manifest / iOS URL Types), or the sign-in browser was dismissed/blocked; re-register and call again. |
+| `client.auth.provider_unavailable` from `signInWithFacebook` | The Facebook provider is disabled in the Publisher console (or bootstrap has no `facebook` entry); enable it and re-run `bootstrap()`. |
+| GitHub/Facebook/Apple callback arrives but the flow does not complete on Android | The host `MainActivity` does not forward `onNewIntent` to `SocialAuthClient.completeDeepLink(...)` (see [Android project setup](#android-project-setup)). |
 | `SdkRateLimitedError` (`150001`) | Rate limit hit; honor `retryAfterSec` before retrying the same request. |
 | Session gone after app restart | In-memory storage — see [Token storage](#token-storage). |

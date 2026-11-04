@@ -1,19 +1,46 @@
 # open4id_sdk
 
-Open4ID client sdk for Flutter. v1 ships Android only;
-iOS is a `platform_unavailable` stub until the Swift native SDK
-(`sdks/ios/`) lands.
+Open4ID client sdk for Flutter. Android delegates to the native Java SDK
+(`com.open4id:open4id-sdk`); iOS delegates to the native Swift SDK
+(`Open4IDSDK`), resolved through the plugin's Swift Package Manager
+manifest. One Dart API for both platforms.
 
 ## Status
 
-**Approved 2026-10-16.** v1 ships Android-only. iOS support is deferred.
+**Approved 2026-10-16.** v1 shipped Android-only (iOS was a
+`platform_unavailable` stub). **iOS support is implemented** on top of the
+`v0.4.0` native tag: same method surface, same wire maps. Provides
+`signInWithPassword`, `continueAsGuest`, `signInWithGitHub`,
+`signInWithFacebook`, `signInWithApple`, and `signInWithGoogle` (interactive
+GoogleSignIn-iOS picker, supplied by the plugin's `Open4IDSocialClient` —
+enable it per app with `configure(googleIosClientId: ...)`). `ensureSession`
+maps to `ensureSession(minValidityMs)`.
 
 ## Installation
 
 ```yaml
 dependencies:
-  open4id_sdk: ^0.3.2
+  open4id_sdk: ^0.4.0
 ```
+
+### iOS host requirements
+
+- iOS 16.0+ deployment target.
+- Build with **Swift Package Manager** for iOS: enable
+  `flutter config --enable-swift-package-manager` and migrate the host
+  project (see flutter SPM doc: `flutter run` after `flutter pub get`; the
+  plugin resolves `Open4IDSDK` from
+  `https://github.com/open4id-community/ios-sdk`, tag `v0.5.x`, via
+  `ios/open4id_sdk/Package.swift`). CocoaPods is not supported for the iOS
+  side — the podspec intentionally fails fast with the reason.
+- Google sign-in works out of the box once you configure it:
+  - Pass the GCP **iOS-type** OAuth client id to `configure(googleIosClientId:)`
+    (ignored on Android, which binds via package name + SHA-1). Empty/omitted
+    keeps the typed `provider_unavailable` behavior on the Google button.
+  - Add the reversed client id (`com.googleusercontent.apps.<client-id>`) as
+    a URL scheme in the host `Info.plist` (plus your `redirectUri` scheme).
+  - The GoogleSignIn-iOS SDK itself is resolved automatically by the plugin's
+    Swift Package manifest — no host dependency needed.
 
 Or depend on the local plugin:
 
@@ -48,6 +75,51 @@ await auth.refresh();
 await auth.signOut();
 ```
 
+## Payments and entitlements
+
+The plugin bridges both platforms' native built-in stores, so one Dart
+surface covers buying, restoring, and entitlement reads:
+
+```dart
+// Shop: catalog rows resolved with store prices (Play Billing on Android,
+// StoreKit on iOS). Unresolvable rows come back with resolvable == false.
+final shop = await auth.store().loadShop();
+
+// Buy: store sheet -> server verification -> acknowledge/consume after
+// acceptance. Branch on the outcome.
+final outcome = await auth.store().buy('sku_premium');
+if (outcome.isVerified) {
+  // one_time/subscription: grant from outcome.entitlements
+  // consumable: grant from outcome.receipt (transactionRef, quantity)
+} else if (outcome.isPending) {
+  // ask-to-buy: nothing verified yet; a later restore picks it up
+}
+
+// Restore: self-sufficient on both platforms (the native stores register
+// themselves as the proof source), so a restart and a reinstall recover
+// purchases with no host wiring. A fresh guest is signed in first when the
+// application allows guest login.
+final restored = await auth.payments().restore();
+// restored.verified / rejected / conflict / hasConflict / proofsUnavailable
+
+// Headless proofs (Unity IAP hosts): forward the purchase token yourself.
+await auth.payments().verifyTransaction('sku_premium', purchaseToken);
+final receipt = await auth.payments().verifyConsumable('sku_gems', token);
+if (receipt.isDelivered) { /* grant receipt.quantity for receipt.transactionRef */ }
+
+// Entitlements: cached snapshot with change listeners.
+await auth.entitlements().refresh();
+auth.entitlements().has('premium'); // active or grace
+auth.entitlements().onChanged((snapshot) { /* re-render the shop */ });
+
+// Ledger receipts (Android only in 0.5.0; iOS answers sdk.not_implemented):
+final rows = await auth.payments().purchases();
+```
+
+Hosts must declare `com.android.vending.BILLING` in their Android manifest
+to sell products; the store is inert without Play services. See
+`USER_GUIDE.md` § Payments for the full contract.
+
 ## Login dialog (UI widget)
 
 The SDK ships `Open4IDLoginDialog` — a modal dialog that mirrors the native
@@ -70,7 +142,8 @@ showOpen4IDLoginDialog(
 ```
 
 The dialog renders email/password, sign-up ("Create account"), forgot-password,
-guest, and social buttons (Google, GitHub, Apple) per bootstrap readiness, in
+guest, and social buttons (Google, GitHub, Facebook, Apple) per bootstrap
+readiness, in
 the same order as the Android SDK (social first, then email/password). The
 dialog auto-dismisses on successful sign-in/sign-up/guest. It listens to
 `onAuthStateChanged` so it reflects sign-in/sign-out/deletion from any source —
@@ -100,18 +173,22 @@ showOpen4IDAuthView(
 
 The view renders email/password, sign-up ("Create account"), forgot-password
 ("Send reset link"), guest, link-email ("Link email"), delete-account
-("Delete my account"), and social buttons (Google, GitHub, Apple) per bootstrap
+("Delete my account"), and social buttons (Google, GitHub, Facebook, Apple) per
+bootstrap
 readiness. While the bound client holds a session, it renders the signed-in
 account view (refresh, sign out, delete account) instead of the login form.
 Action buttons (Sign in, Continue as guest, Sign up, Send reset link, Link
 email, Delete my account, Refresh, Sign out, Delete account, BACK) render
 without icons; only social provider buttons carry brand SVG icons (Google,
-GitHub, Apple). It listens to `onAuthStateChanged` so it reflects state
+GitHub, Facebook, Apple). It listens to `onAuthStateChanged` so it reflects
+state
 changes from any source.
 
 ## Deep-link callback forwarding
 
-GitHub/Apple Custom Tab callbacks return via a deep-link intent
+### Android
+
+GitHub/Facebook/Apple Custom Tab callbacks return via a deep-link intent
 (`?code&state`) on `onNewIntent`. The host app's `MainActivity` should forward
 the intent URL to the SDK:
 
@@ -125,21 +202,57 @@ final auth = Open4IDAuthClient();
 await auth.handleNewIntent(intentDataString);
 ```
 
-The Flutter plugin (`Open4idSdkPlugin`) implements `ActivityAware` and
-forwards `onActivityResult` to `SocialAuthClient.completeGoogleSignIn()` for
-the Google account picker result.
+### iOS
+
+GitHub/Facebook/Apple callbacks complete inside the SDK's
+`ASWebAuthenticationSession`
+(the plugin attaches the foreground key window as the presentation anchor).
+Deep-link forwarding is not required for the standard flows; when a callback
+URL is forwarded to your app anyway (e.g. an interrupted flow that kept the
+system browser alive), pass it to `auth.handleNewIntent(...)` and the same
+completion is attempted — the method returns whether a pending transaction
+was consumable.
+
+The Flutter plugin (`Open4idSdkPlugin`) implements `ActivityAware` on Android
+and forwards `onActivityResult` to `SocialAuthClient.completeGoogleSignIn()`
+for the Google account picker result. GitHub/Facebook/Apple callbacks are
+handled by the base SDK on both platforms; `handleNewIntent` completes the
+parked code slot when a deep link actually reaches the app.
 
 ## Platform strategy
 
 - Dart owns the public API and error mapping (`client.auth.*` / `system.*`).
 - Android platform side delegates to `sdks/android/open4id-sdk/` (Java,
-  version `0.3.2`) via platform channels.
-- The Flutter plugin (`Open4idSdkPlugin`) implements `ActivityAware` and
-  forwards Google sign-in `onActivityResult` results to
+  version `0.4.0`) via platform channels. GitHub/Facebook/Apple Custom Tabs
+  are implemented by the base SDK (`Open4IDAuthClient.openGitHubCustomTab` /
+  `signInWithFacebook` / `openAppleCustomTab`); pass the host `Activity` via
+  `new Open4IDAuthClient(activity)` or `setHostActivity(activity)`.
+- The Flutter plugin (`Open4idSdkPlugin`) implements `ActivityAware` on
+  Android and forwards Google sign-in `onActivityResult` results to
   `SocialAuthClient.completeGoogleSignIn()`; host `MainActivity` should also
-  forward `onNewIntent` URLs to `auth.handleNewIntent()` for GitHub/Apple
-  callbacks.
-- iOS platform side returns `platform_unavailable` for every method in v1.
+  forward `onNewIntent` URLs to `auth.handleNewIntent()` for
+  GitHub/Facebook/Apple callbacks.
+- iOS platform side delegates to the native Swift SDK (`Open4IDSDK`
+  v0.4.0) via platform channels — the same
+  `Open4IDAuthClient` headless surface as Swift apps:
+  `bootstrap()` (`platform: "ios"` binding), `handleCallback`/PKCE,
+  single-flight refresh, server-callback receipt, `signOut` with best-effort
+  revocation. Social providers:
+  - Apple/GitHub/Facebook: SDK-owned `ASWebAuthenticationSession` (plugin
+    supplies the foreground key window as the presentation anchor).
+  - Google: interactive GoogleSignIn-iOS picker implemented by the plugin's
+    `Open4IDSocialClient` (subclass of the native client overriding
+    `getGoogleAuthorizationCode`) — the iOS analogue of the Android
+    `SocialAuthClient`. Client id arrives through
+    `configure(googleIosClientId:)`; empty keeps the typed
+    `provider_unavailable` behavior. Cancel maps to `popup_closed`,
+    the interaction budget (120 s) to `popup_timeout`, other GID failures
+    to `access_denied` with the `gid_*` diagnostics in `field_errors`.
+    Note: simulators cannot complete the Google keychain handshake
+    (`gid_code=-2` keychain error); verify on a physical device.
+- Attestation stays audit-only on both platforms (Play Integrity stub on
+  Android, `unavailable` verdict on iOS until the attestKey handshake is
+  contracted).
 
 ## Security boundary
 
@@ -156,12 +269,29 @@ the Google account picker result.
 
 ```sh
 cd sdks/flutter/open4id_sdk
-flutter pub get        # pending: Flutter not installed in this environment
-flutter analyze        # pending: Flutter not installed in this environment
-flutter test           # pending: Flutter not installed in this environment
+flutter pub get
+flutter analyze
+flutter test
+```
+
+iOS plugin verifier (scratch host app, matches the pass run for v0.4.0 +
+iOS support):
+
+```sh
+cd /tmp && flutter create --platforms=ios --org com.open4id \
+    --project-name open4id_scratch open4id_scratch && cd open4id_scratch
+# - add `open4id_sdk: { path: /path/to/sdks/flutter/open4id_sdk }` to pubspec.yaml
+# - bump IPHONEOS_DEPLOYMENT_TARGET to 16.0 in ios/Runner.xcodeproj
+#   (FlutterGeneratedPluginSwiftPackage raises its SupportedPlatform to the
+#    host project's deployment target; 16.0 matches the plugin + native SDK)
+flutter pub get
+flutter build ios --simulator --no-codesign   # resolves Open4IDSDK via SPM
 ```
 
 Live smoke on Android emulator + real device: bootstrap, redirect sign-in,
-password/guest/social, refresh rotation, revoke, delete.
+password/guest/social, refresh rotation, revoke, delete. On iOS: password +
+guest round-trips and the GitHub/Facebook/Apple web sessions on a real device
+(simulator web sheets can be flaky on iOS 27.1 per the native SDK task
+records).
 
 All Markdown in English.

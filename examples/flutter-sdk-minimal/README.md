@@ -31,6 +31,10 @@ flutter build apk --debug   # or flutter run
 flutter install             # installs the debug APK
 ```
 
+> The example pins `open4id_sdk: ^0.5.0` — the first pub.dev release
+> carrying payments. On Android, hosts must declare
+> `com.android.vending.BILLING` in their manifest to sell products.
+
 ## Features
 
 | Feature | Description |
@@ -44,6 +48,7 @@ flutter install             # installs the debug APK
 | **Guest sign-in** | Guest profile/session |
 | **Session** | Refresh, get user, sign out, delete account |
 | **Auth state events** | `onAuthStateChanged` listener reacts to any sign-in/sign-out/refresh/deletion |
+| **Payments** | Built-in store on both platforms (Play Billing / StoreKit): load shop with prices, buy through the real store sheet (verify + acknowledge/consume inside the SDK), restore, ledger purchases (Android), entitlement snapshot with change events |
 | **Locale** | English / Vietnamese switching |
 
 ## Social sign-in registration

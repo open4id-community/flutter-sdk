@@ -73,6 +73,8 @@ class _MinimalHomeState extends State<MinimalHome> {
   final _log = StringBuffer();
   final _logScroll = ScrollController();
   String _locale = 'en';
+  final _productId = TextEditingController();
+  void Function()? _entitlementsCancel;
 
   @override
   void initState() {
@@ -85,12 +87,22 @@ class _MinimalHomeState extends State<MinimalHome> {
         _appendLog('auth state: signed out');
       }
     });
+    // Entitlement changes from any source (verify, restore, refresh,
+    // sign-in, sign-out) land in the log console.
+    _entitlementsCancel = _auth.entitlements().onChanged((snapshot) {
+      if (snapshot == null) return;
+      for (final entitlement in snapshot.entitlements) {
+        _appendLog('entitlement: ${entitlement.key} = ${entitlement.state}'
+            ' via ${entitlement.source}');
+      }
+    });
     _onBootstrap();
   }
 
   @override
   void dispose() {
     _authStateCancel?.call();
+    _entitlementsCancel?.call();
     _appId.dispose();
     _environment.dispose();
     _publicKey.dispose();
@@ -295,6 +307,119 @@ class _MinimalHomeState extends State<MinimalHome> {
     _appendLog('language: $tag');
   }
 
+  // ---------- Payments (built-in store on both platforms) ----------
+
+  /// Loads the shop rows with store prices, prefills the product field with
+  /// the first row, then runs the startup restore — the same call that
+  /// covers a restart (stored session) and a reinstall (fresh guest; the
+  /// store proof moves the anonymous binding).
+  Future<void> _onLoadShop() async {
+    try {
+      await _configureClient();
+    } catch (e) {
+      _appendLog('configure: ${_rootMessage(e)}');
+      return;
+    }
+    _appendLog('shop…');
+    try {
+      final rows = await _auth.store().loadShop();
+      if (rows.isEmpty) {
+        _appendLog('shop: no products for this platform (catalog disabled?)');
+        return;
+      }
+      for (final row in rows) {
+        _appendLog('shop: ${row.product.productId} [${row.product.type}]'
+            ' ${row.isResolvable ? row.formattedPrice : '(not in store)'}');
+      }
+      if (mounted) {
+        setState(() => _productId.text = rows.first.product.productId);
+      }
+      await _onRestore('startup restore');
+    } catch (e) {
+      _appendLog('shop failed: ${_rootMessage(e)}');
+    }
+  }
+
+  /// Buys the selected row through the real store sheet. The native store
+  /// verifies through Core API and acknowledges/consumes only after the
+  /// server accepted the proof — the outcome is the single value to branch
+  /// on.
+  Future<void> _onBuy() async {
+    if (_productId.text.trim().isEmpty) {
+      _appendLog('buy: product id required (load the shop first)');
+      return;
+    }
+    _appendLog('buy ${_productId.text.trim()}… (store sheet opens)');
+    try {
+      final outcome = await _auth.store().buy(_productId.text.trim());
+      if (outcome.isCancelled) {
+        _appendLog('purchase cancelled');
+        return;
+      }
+      if (outcome.isPending) {
+        _appendLog('purchase pending (ask-to-buy): a later restore picks it up');
+        return;
+      }
+      _appendLog('purchase ok: ${outcome.productId}');
+      if (outcome.receipt != null) {
+        final receipt = outcome.receipt!;
+        _appendLog('consumable ${receipt.state}: ${receipt.transactionRef}'
+            ' x${receipt.quantity}'
+            '${receipt.refundedQuantity > 0 ? ' (refunded ${receipt.refundedQuantity})' : ''}');
+        return;
+      }
+      _appendLog('verify ok: ${outcome.entitlements.length} entitlement(s)');
+    } catch (e) {
+      _appendLog('purchase failed: ${_rootMessage(e)}');
+    }
+  }
+
+  Future<void> _onRestore(String label) async {
+    _appendLog('$label: restore…');
+    try {
+      final result = await _auth.payments().restore();
+      _appendLog('$label ok: ${result.entitlements.length} entitlement(s),'
+          ' verified=${result.verified} rejected=${result.rejected}'
+          ' conflict=${result.conflict}'
+          '${result.proofsUnavailable ? ', store proofs unavailable' : ''}');
+      if (result.hasConflict) {
+        _appendLog('$label: purchase owned by another account —'
+            ' sign in as that account to recover it');
+      }
+    } catch (e) {
+      _appendLog('$label failed: ${_rootMessage(e)}');
+    }
+  }
+
+  /// Ledger receipts: how a game learns about consumable deliveries and
+  /// refunds while webhook delivery is not implemented. Android only in
+  /// 0.5.0 (iOS answers `sdk.not_implemented`).
+  Future<void> _onPurchases() async {
+    _appendLog('purchases…');
+    try {
+      final rows = await _auth.payments().purchases();
+      _appendLog('purchases ok: ${rows.length} receipt(s)');
+      for (final purchase in rows) {
+        _appendLog('  ${purchase.transactionRef} ${purchase.productId}'
+            ' [${purchase.type}] ${purchase.status} x${purchase.quantity}'
+            '${purchase.isPartiallyRefunded
+                ? ' (refunded ${purchase.refundedQuantity})' : ''}');
+      }
+    } catch (e) {
+      _appendLog('purchases failed: ${_rootMessage(e)}');
+    }
+  }
+
+  Future<void> _onRefreshEntitlements() async {
+    _appendLog('entitlements…');
+    try {
+      final snapshot = await _auth.entitlements().refresh();
+      _appendLog('entitlements ok: ${snapshot.entitlements.length}');
+    } catch (e) {
+      _appendLog('entitlements failed: ${_rootMessage(e)}');
+    }
+  }
+
   Widget _field(TextEditingController controller, String label,
       {bool obscure = false}) {
     return Padding(
@@ -389,6 +514,34 @@ class _MinimalHomeState extends State<MinimalHome> {
                     onPressed: () => _setLocale('vi'),
                     child: Text(
                         'Tiếng Việt${_locale == 'vi' ? ' ✓' : ''}'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _field(_productId, 'Product id (from the shop)'),
+            _button('Load shop + startup restore', _onLoadShop),
+            _button('Buy with store sheet', _onBuy),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _onRestore('restore'),
+                    child: const Text('Restore'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _onPurchases,
+                    child: const Text('Purchases'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _onRefreshEntitlements,
+                    child: const Text('Entitlements'),
                   ),
                 ),
               ],

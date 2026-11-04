@@ -38,11 +38,11 @@
     },
     {
       "identity" : "ios-sdk",
-      "kind" : "localSourceControl",
-      "location" : "/private/tmp/ios-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/open4id-community/ios-sdk",
       "state" : {
-        "revision" : "02a36c6cac8c63dbb72461f85f3b0e239d41bfee",
-        "version" : "0.3.3"
+        "revision" : "6377fd408590e37a017471a6d270f36dbd360b14",
+        "version" : "0.6.0"
       }
     }
   ],
