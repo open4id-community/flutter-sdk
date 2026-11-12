@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 (2026-11-13)
+
+- **Guest button visibility split** (parity with the native SDKs): the
+  bootstrap `login` readiness gains `guestButtonVisible` (wire
+  `guest_button_visible`), while `guestEnabled` remains the server
+  capability that gates guest sign-in and guest-bound payments. The
+  Flutter login view now renders "Continue as guest" only when the
+  capability exists **and** the button is visible — previously the button
+  always rendered, even with guest login disabled. The flag defaults to
+  `guest_enabled` when the wire omits it, so older Core API responses
+  behave exactly as before. Anonymous checkout is `guest_enabled: true`
+  with `guest_button_visible: false`.
+- **Native platform upgrades**: Android now binds
+  `com.open4id:open4id-sdk:0.8.0` (unified event surface,
+  `subscriptionState`, one-call `start()`, purchase-identity preflight
+  before the Play sheet) and iOS resolves Open4IDSDK `0.8.8` through SPM
+  (one event surface, `subscriptionState(productId:)`, `start()`, the
+  same preflight before the StoreKit sheet). Both arrive through the
+  existing channels with no Dart API changes.
+
 ## 0.5.0
 
 - **Payments and entitlements**: new `client.payments()`,
