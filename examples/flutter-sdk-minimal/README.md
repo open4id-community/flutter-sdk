@@ -5,9 +5,11 @@ Mirrors the native `sdks/android/sample/` (`android-sdk-minimal`) example: edita
 bootstrap, Google/GitHub/Apple social sign-in, email/password sign-in, guest, session management
 (refresh, get user, sign out, delete account), locale switching, and `onAuthStateChanged` events.
 
-Uses the `open4id_sdk` Flutter plugin (0.3.4 from pub.dev; Android + iOS)
+Uses the `open4id_sdk` Flutter plugin (`^1.0.0` from pub.dev; Android + iOS)
 which delegates
-to `sdks/android/open4id-sdk/` (Java, version 0.3.2) via platform channels.
+to `sdks/android/open4id-sdk/` (Java, version 1.0.0) via platform channels and
+to the native Swift SDK (Open4IDSDK 1.0.0, resolved through Swift Package
+Manager).
 
 ## Prerequisites
 
@@ -48,7 +50,7 @@ flutter install             # installs the debug APK
 | **Guest sign-in** | Guest profile/session |
 | **Session** | Refresh, get user, sign out, delete account |
 | **Auth state events** | `onAuthStateChanged` listener reacts to any sign-in/sign-out/refresh/deletion |
-| **Payments** | Built-in store on both platforms (Play Billing / StoreKit): load shop with prices, buy through the real store sheet (verify + acknowledge/consume inside the SDK), restore, ledger purchases (Android), entitlement snapshot with change events |
+| **Payments** | Built-in store on both platforms (Play Billing / StoreKit): load shop with prices, buy through the real store sheet (verify + acknowledge/consume inside the SDK), interactive restore for the **Restore purchases** button (`restoreInteractive()`, the startup restore stays passive), ledger purchases (Android), entitlement snapshot with change events |
 | **Locale** | English / Vietnamese switching |
 
 ## Social sign-in registration
