@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.2 (2026-11-15)
+
+- **Typed store sign-in cancellation**: `SdkStoreSignInCancelledError`
+  (`140007`, `client.payment.store_sign_in_cancelled`) joins the Dart error
+  hierarchy. Dismissing the App Store sheet raised by `restoreInteractive()`
+  surfaced as a generic `SdkInternalError`, so a host could not tell "the
+  player changed their mind" from a real failure. Nothing is submitted to the
+  ledger on that path — treat it as a normal outcome of the Restore button.
+- Library docs now name the shipped native versions (1.0.0), and the error
+  table documents `140007`.
+
 ## 1.0.1 (2026-11-15)
 
 - **Docs-only patch.** The 1.0.0 archive was cut while the installation

@@ -595,6 +595,7 @@ change between minor versions:
 | `SdkUnavailableError` | `160001` | Core API or transport unavailable (timeout, HTTP 5xx, connectivity). |
 | `SdkStoreUnavailableError` | `160003` | Store-side failure (Play Billing / StoreKit unreachable, product unavailable). Retryable. |
 | `SdkConflictError` | `140006` | The purchase is bound to another credentialed account (`client.payment.owned_by_another_account`); restore reports it as a `conflict` count instead. |
+| `SdkStoreSignInCancelledError` | `140007` | The player dismissed the App Store sign-in sheet raised by `restoreInteractive()` (`client.payment.store_sign_in_cancelled`). Nothing was submitted; offer the button again instead of treating it as a failure. iOS only. |
 | `SdkInternalError` | `170001` | Unexpected internal failure. |
 | `SdkNotImplementedError` | `-1` | Method not supported on the current platform or not yet shipped. |
 

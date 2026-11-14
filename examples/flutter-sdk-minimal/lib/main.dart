@@ -374,18 +374,29 @@ class _MinimalHomeState extends State<MinimalHome> {
     }
   }
 
-  Future<void> _onRestore(String label) async {
-    _appendLog('$label: restore…');
+  /// The startup restore is passive; the "Restore purchases" button uses the
+  /// player-pressed path, which syncs the store account first (iOS shows the
+  /// App Store sign-in sheet when nobody is signed in) and marks
+  /// `storeSynced`, so `verified == 0` is the honest "owns nothing" answer.
+  Future<void> _onRestore(String label, {bool interactive = false}) async {
+    _appendLog('$label: ${interactive ? 'interactive restore' : 'restore'}…');
     try {
-      final result = await _auth.payments().restore();
+      final result = interactive
+          ? await _auth.payments().restoreInteractive()
+          : await _auth.payments().restore();
       _appendLog('$label ok: ${result.entitlements.length} entitlement(s),'
           ' verified=${result.verified} rejected=${result.rejected}'
           ' conflict=${result.conflict}'
+          '${result.storeSynced ? ', storeSynced' : ''}'
           '${result.proofsUnavailable ? ', store proofs unavailable' : ''}');
       if (result.hasConflict) {
         _appendLog('$label: purchase owned by another account —'
             ' sign in as that account to recover it');
       }
+    } on SdkStoreSignInCancelledError {
+      // iOS only: the player dismissed the App Store sheet. Nothing was
+      // submitted, so offer the button again instead of reporting a failure.
+      _appendLog('$label: store sign-in cancelled — nothing submitted');
     } catch (e) {
       _appendLog('$label failed: ${_rootMessage(e)}');
     }
@@ -526,8 +537,8 @@ class _MinimalHomeState extends State<MinimalHome> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => _onRestore('restore'),
-                    child: const Text('Restore'),
+                    onPressed: () => _onRestore('restore', interactive: true),
+                    child: const Text('Restore purchases'),
                   ),
                 ),
                 const SizedBox(width: 8),
