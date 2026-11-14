@@ -31,9 +31,9 @@ flutter build apk --debug   # or flutter run
 flutter install             # installs the debug APK
 ```
 
-> The example pins `open4id_sdk: ^0.5.0` — the first pub.dev release
-> carrying payments. On Android, hosts must declare
-> `com.android.vending.BILLING` in their manifest to sell products.
+> The example pins `open4id_sdk: ^1.0.0` — the first pub.dev release
+> with interactive restore (`restoreInteractive()`). On Android, hosts must
+> declare `com.android.vending.BILLING` in their manifest to sell products.
 
 ## Features
 

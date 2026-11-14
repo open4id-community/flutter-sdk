@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.0 (2026-11-15)
+
+- **Interactive restore** (`restoreInteractive()` on `payments()`, iOS and
+  Android): the call behind a "Restore purchases" button. On iOS it runs
+  `AppStore.sync()` first, so a signed-out App Store account gets the store
+  sign-in sheet; a cancelled sheet throws `SdkStoreSignInCancelledError`
+  (`140007`). On Android it connects the Play client explicitly and widens
+  the query to suspended subscriptions (grace period or on hold); Play has no
+  sign-in sheet and no cancellable step, so a failed connection stays the
+  retryable `SdkStoreUnavailableError` (`160003`) and no ledger request is
+  made. The passive `restore()` is unchanged and still drives the startup
+  restore.
+- **`RestoreResult.storeSynced`**: true only when the store sync completed
+  before the proofs were read. `verified == 0` on a synced result is the
+  honest "this store account owns none of our products" answer; on the
+  passive paths a zero count still means "the store reported nothing".
+- **App-open analytics**: `appOpen()` (fire-and-forget cold-start ping that
+  never fails the caller) and `deviceIdentifier()` (the installation id the
+  native SDKs mint and persist locally). The id rides every payment call as
+  `device_id`/`device_platform`; Core API stores only a salted hash.
+- **Native platforms at 1.0.0**: Android binds
+  `com.open4id:open4id-sdk:1.0.0`; iOS resolves Open4IDSDK `1.0.0` through
+  Swift Package Manager. Both bring the native 1.0.0 behavior — wallet-safe
+  stale-token rotation on the player calls, and device attribution on the
+  payment path — through the existing channels with no other Dart API
+  changes.
+
 ## 0.6.0 (2026-11-13)
 
 - **Guest button visibility split** (parity with the native SDKs): the

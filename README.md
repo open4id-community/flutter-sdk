@@ -20,7 +20,7 @@ maps to `ensureSession(minValidityMs)`.
 
 ```yaml
 dependencies:
-  open4id_sdk: ^0.4.0
+  open4id_sdk: ^1.0.0
 ```
 
 ### iOS host requirements
@@ -73,7 +73,17 @@ final session = await auth.signInWithPassword('player@example.com', 'password');
 final user = await auth.getUser();
 await auth.refresh();
 await auth.signOut();
+
+// App-open analytics (optional, fire-and-forget — resolves on every path):
+await auth.appOpen();                       // cold-start ping → opens/devices
+final deviceId = await auth.deviceIdentifier(); // native-persisted installation id
 ```
+
+The installation id is minted and persisted by the native layer (Keychain
+on iOS/macOS, SharedPreferences on Android) and forwarded through the
+method channel. It is attribution metadata, not a credential: the server
+stores only a salted hash, and every payment call rides the same id beside
+the session — the money path never depends on it.
 
 ## Payments and entitlements
 
@@ -101,6 +111,13 @@ if (outcome.isVerified) {
 // application allows guest login.
 final restored = await auth.payments().restore();
 // restored.verified / rejected / conflict / hasConflict / proofsUnavailable
+
+// "Restore purchases" button: the interactive path syncs the store first
+// (iOS AppStore.sync -> sign-in sheet, cancellable 140007; Android connects
+// Play explicitly and includes suspended subscriptions), and marks
+// storeSynced, so verified == 0 is the honest "owns nothing" answer.
+final pressed = await auth.payments().restoreInteractive();
+// pressed.storeSynced == true on a completed store sync
 
 // Headless proofs (Unity IAP hosts): forward the purchase token yourself.
 await auth.payments().verifyTransaction('sku_premium', purchaseToken);

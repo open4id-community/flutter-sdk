@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  open4id_sdk: ^0.6.0
+  open4id_sdk: ^1.0.0
 
 dev_dependencies:
   flutter_test:

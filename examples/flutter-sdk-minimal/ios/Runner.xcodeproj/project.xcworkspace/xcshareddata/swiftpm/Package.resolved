@@ -41,8 +41,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/open4id-community/ios-sdk",
       "state" : {
-        "revision" : "6377fd408590e37a017471a6d270f36dbd360b14",
-        "version" : "0.6.0"
+        "revision" : "71d93180f221fa5623740565659f1b40e5862a0b",
+        "version" : "1.0.0"
       }
     }
   ],

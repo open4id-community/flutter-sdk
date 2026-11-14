@@ -58,7 +58,7 @@ Add the package from [pub.dev](https://pub.dev/packages/open4id_sdk):
 
 ```yaml
 dependencies:
-  open4id_sdk: ^0.4.0
+  open4id_sdk: ^1.0.0
 ```
 
 ```sh
@@ -538,6 +538,16 @@ anything; the client claim is only a hint.
   another **credentialed** account is never taken: `restore` reports a
   `conflict` count (the player must sign in as the owner) and `verify`
   throws `SdkConflictError` (140006).
+- **Interactive restore**: a "Restore purchases" button must call
+  `payments().restoreInteractive()`, not `restore()`. It syncs the store
+  account first — iOS runs `AppStore.sync()`, so a signed-out App Store
+  account gets the sign-in sheet (a cancelled sheet throws
+  `SdkStoreSignInCancelledError`, 140007); Android connects the Play client
+  explicitly and includes suspended subscriptions in the query (no sheet and
+  no cancellation — a failed connection stays retryable `160003`). The
+  result is marked `storeSynced`, so `verified == 0` on a synced result
+  means "this store account owns none of our products"; the passive
+  `restore()` leaves it `false` and keeps the startup path unchanged.
 - **Entitlements**: `entitlements().refresh()` re-reads the server-derived
   rows; `has(key)` is true only for `active`/`grace`; `list()` keeps
   expired/revoked history. The snapshot is cleared when the signed-in
