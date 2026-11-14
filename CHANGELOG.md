@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 (2026-11-15)
+
+- **Docs-only patch.** The 1.0.0 archive was cut while the installation
+  snippet in `README.md` and `USER_GUIDE.md` still said `open4id_sdk: ^0.4.0`;
+  both now say `^1.0.0`. No code, API, or behavior change — 1.0.0 remains
+  valid to use, this just fixes what the package page tells you to install.
+
 ## 1.0.0 (2026-11-15)
 
 - **Interactive restore** (`restoreInteractive()` on `payments()`, iOS and
