@@ -85,6 +85,37 @@ method channel. It is attribution metadata, not a credential: the server
 stores only a salted hash, and every payment call rides the same id beside
 the session — the money path never depends on it.
 
+### Publisher events (`trackEvent`)
+
+`appOpen()` is automatic tracking. `trackEvent()` is the explicit one: call
+it when something the publisher cares about happened, and the Portal's
+**Events** tab charts it. Nothing calls it for you, and it never touches the
+install/open/MAU numbers.
+
+```dart
+await auth.trackEvent('level_completed');            // count
+await auth.trackEvent('level_completed', value: 42); // numeric aggregate
+await auth.trackingEnabled();                        // true unless opted out
+await auth.setTrackingEnabled(false);                // opt out, clears the queue
+```
+
+- **Name**: lowercase snake_case, 2–40 characters; `open4id.*` is reserved
+  for automatic tracking. No properties in v1 — an optional numeric `value`
+  only (`|value| <= 1e9`).
+- **Pre-declared keys**: the Events tab is an allow-list — create the
+  event in the Portal first. The server silently discards entries whose
+  key is not a declared, active event (the batch answers with the
+  discarded count in `rejected`); siblings still write.
+- **Native contract**: the native SDKs own the queue — batching (20 events
+  or 10 s), retry on network/`429`/`5xx` up to five times, 100 events /
+  7 days persisted offline, bearer attribution when a session exists. Dart
+  only forwards, so behaviour matches the platform SDK exactly (including
+  at-least-once counts across retries).
+- **Never throws**: an unconfigured client, an invalid name/value, and every
+  server error resolve silently.
+- **Opting out**: `setTrackingEnabled(false)` clears the native buffered and
+  persisted queue and stops sends. It does **not** affect `appOpen()`.
+
 ## Payments and entitlements
 
 The plugin bridges both platforms' native built-in stores, so one Dart

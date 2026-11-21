@@ -47,7 +47,7 @@ class _MinimalUiHomeState extends State<MinimalUiHome> {
       TextEditingController(text: 'app_4a17c6406abaefdf0d9a705e7175b37c');
   final TextEditingController _envCtrl = TextEditingController(text: 'development');
   final TextEditingController _publicKeyCtrl =
-      TextEditingController(text: 'sdk_pk_24cf6cc954d16591812fd1b9953ef053f5133b13f7cec9ae');
+      TextEditingController(text: 'sdk_pk_1c91d1ee8bcf04e9226c09f291bd18c21ceeaa6f61b34203');
   final TextEditingController _endpointCtrl =
       TextEditingController(text: 'https://id.open4id.com/api');
   final TextEditingController _redirectUriCtrl =

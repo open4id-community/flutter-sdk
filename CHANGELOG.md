@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0 (unreleased)
+
+- **Publisher events**: `trackEvent(name, value: …)` posts `client/events`,
+  the explicit counterpart of the automatic `appOpen()` ping — nothing calls
+  it for you and it never touches the install/open/MAU numbers. The native
+  SDK owns the queue (batching of 20 events or 10 s, retry on
+  network/`429`/`5xx` up to five times, 100 events / 7 days persisted
+  offline, attribution to the signed-in player), `trackEvent` never throws,
+  and an invalid name/value is dropped natively. `setTrackingEnabled(false)`
+  clears the buffered and persisted queue and stops sends; `trackingEnabled()`
+  reports the native state. `appOpen()` is unaffected by the switch.
+  Numbers are at-least-once: a retry can inflate counts.
+- **Native SDK 1.1.0 required** (`com.open4id:open4id-sdk:1.1.0` on Android,
+  `open4id-community/ios-sdk` `from: "1.1.0"` on iOS) — the `trackEvent`
+  surface lands there first.
+
 ## 1.0.2 (2026-11-15)
 
 - **Typed store sign-in cancellation**: `SdkStoreSignInCancelledError`

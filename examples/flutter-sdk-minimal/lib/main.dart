@@ -46,7 +46,7 @@ class _MinimalHomeState extends State<MinimalHome> {
       text: 'app_4a17c6406abaefdf0d9a705e7175b37c');
   final _environment = TextEditingController(text: 'development');
   final _publicKey = TextEditingController(
-      text: 'sdk_pk_24cf6cc954d16591812fd1b9953ef053f5133b13f7cec9ae');
+      text: 'sdk_pk_1c91d1ee8bcf04e9226c09f291bd18c21ceeaa6f61b34203');
   final _endpoint = TextEditingController(text: 'https://id.open4id.com/api');
   final _redirectUri = TextEditingController(
       text: _isIOS
